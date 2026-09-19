@@ -21,85 +21,65 @@ export class DroneRenderer {
     // 1. Follower Drones Instanced Mesh
     const droneGeometry = this.createDroneGeometry()
     const droneMaterial = new THREE.MeshStandardMaterial({
-      roughness: 0.3,
-      metalness: 0.8,
-      vertexColors: true,
+      color: 0xffffff,
+      roughness: 0.25,
+      metalness: 0.1,
+      emissive: 0x0a2f1d,
+      emissiveIntensity: 0.35,
     })
     this.instancedMesh = new THREE.InstancedMesh(droneGeometry, droneMaterial, maxDrones)
     this.instancedMesh.castShadow = true
     this.instancedMesh.receiveShadow = true
     this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+
+    // Pre-initialize instance colors so shader compiles with USE_INSTANCING_COLOR
+    for (let i = 0; i < maxDrones; i++) {
+      this.tempScale.set(0, 0, 0)
+      this.tempMatrix.compose(this.tempPos, this.tempQuat, this.tempScale)
+      this.instancedMesh.setMatrixAt(i, this.tempMatrix)
+      this.instancedMesh.setColorAt(i, new THREE.Color(0x10b981))
+    }
+    this.instancedMesh.instanceMatrix.needsUpdate = true
+    if (this.instancedMesh.instanceColor) {
+      this.instancedMesh.instanceColor.needsUpdate = true
+    }
     this.scene.add(this.instancedMesh)
 
     // 2. Leader Drone Mesh
     this.leaderGroup = new THREE.Group()
-    const leaderBodyGeo = new THREE.OctahedronGeometry(0.85)
+    const leaderBodyGeo = new THREE.OctahedronGeometry(1.1)
     const leaderMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
+      color: 0xfbbf24,
       emissive: 0xd97706,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.7,
       roughness: 0.2,
-      metalness: 0.9,
+      metalness: 0.3,
     })
     this.leaderMesh = new THREE.Mesh(leaderBodyGeo, leaderMat)
     this.leaderMesh.castShadow = true
     this.leaderGroup.add(this.leaderMesh)
 
     // Rotating beacon ring for leader
-    const ringGeo = new THREE.TorusGeometry(1.6, 0.06, 16, 64)
+    const ringGeo = new THREE.TorusGeometry(1.8, 0.08, 16, 64)
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, wireframe: true })
     this.beaconRing = new THREE.Mesh(ringGeo, ringMat)
     this.beaconRing.rotation.x = Math.PI / 2
     this.leaderGroup.add(this.beaconRing)
 
     // Leader point light
-    this.leaderLight = new THREE.PointLight(0xfbbf24, 2.0, 15)
+    this.leaderLight = new THREE.PointLight(0xfbbf24, 2.5, 20)
     this.leaderGroup.add(this.leaderLight)
 
     this.leaderGroup.visible = false
     this.scene.add(this.leaderGroup)
-
-    // Hide all instances initially
-    for (let i = 0; i < maxDrones; i++) {
-      this.tempScale.set(0, 0, 0)
-      this.tempMatrix.compose(this.tempPos, this.tempQuat, this.tempScale)
-      this.instancedMesh.setMatrixAt(i, this.tempMatrix)
-    }
-    this.instancedMesh.instanceMatrix.needsUpdate = true
   }
 
   createDroneGeometry() {
-    // Quadcopter drone structure
-    const droneGroup = new THREE.Group()
-
-    // Center body
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 0.2, 0.6),
-      new THREE.MeshStandardMaterial()
-    )
-    droneGroup.add(body)
-
-    // 4 rotor arms
-    const arm1 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 1.2),
-      new THREE.MeshStandardMaterial()
-    )
-    arm1.rotation.z = Math.PI / 2
-    arm1.rotation.y = Math.PI / 4
-    droneGroup.add(arm1)
-
-    const arm2 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 1.2),
-      new THREE.MeshStandardMaterial()
-    )
-    arm2.rotation.z = Math.PI / 2
-    arm2.rotation.y = -Math.PI / 4
-    droneGroup.add(arm2)
-
-    // Merge into single BufferGeometry for instancing
-    // Or simplified cone/tetrahedron for high-efficiency rendering
-    const geo = new THREE.ConeGeometry(0.5, 0.9, 5)
-    geo.rotateX(Math.PI / 2) // Point forward along Z
+    // Sleek faceted delta-wing drone body:
+    // Wide aerodynamic arrowhead with prominent wingtips
+    const geo = new THREE.ConeGeometry(1.2, 1.8, 4)
+    geo.rotateX(Math.PI / 2) // Point nose forward along +Z
+    geo.scale(1.3, 0.45, 1.3) // Flatten vertically and widen
     return geo
   }
 

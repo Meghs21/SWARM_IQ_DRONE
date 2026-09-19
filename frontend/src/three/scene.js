@@ -33,10 +33,10 @@ export function createSimulationScene(container) {
   controls.target.set(0, 10, 0)
 
   // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0)
   scene.add(ambientLight)
 
-  const dirLight = new THREE.DirectionalLight(0x06b6d4, 1.2)
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.3)
   dirLight.position.set(60, 120, 50)
   dirLight.castShadow = true
   dirLight.shadow.mapSize.width = 2048
@@ -49,7 +49,7 @@ export function createSimulationScene(container) {
   dirLight.shadow.camera.bottom = -120
   scene.add(dirLight)
 
-  const secondaryLight = new THREE.DirectionalLight(0x3b82f6, 0.6)
+  const secondaryLight = new THREE.DirectionalLight(0xdbeafe, 0.7)
   secondaryLight.position.set(-80, 60, -80)
   scene.add(secondaryLight)
 
