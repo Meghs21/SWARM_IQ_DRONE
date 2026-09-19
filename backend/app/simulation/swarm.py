@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from app.simulation.drone import Drone
-from app.models.schemas import DroneRole, DroneStatus, SimulationMetrics
+from app.models.schemas import DroneRole, DroneStatus, SimulationMetrics, FormationType
 from app.core.config import settings
 
 
@@ -28,47 +28,126 @@ class Swarm:
 
         self.initialize_drones(drone_count, self.spawn_center)
 
-    def initialize_drones(self, count: int, spawn_center: np.ndarray) -> None:
-        """Spawn drones distributed in a jittered grid around spawn center."""
+    def initialize_drones(
+        self,
+        count: int,
+        spawn_center: np.ndarray,
+        formation: Optional[FormationType] = None,
+    ) -> None:
+        """Spawn drones distributed either in designated formation geometry or jittered grid."""
         self.drones.clear()
         self.spawn_center = np.copy(spawn_center)
         self.collision_warnings = 0
         self.near_misses = 0
         self.actual_collisions = 0
 
-        cols = int(np.ceil(np.sqrt(count)))
-        spacing = 3.0
+        if count <= 0:
+            self.leader_id = None
+            return
 
-        for i in range(count):
-            drone_id = f"DRONE_{i+1:02d}"
-            col = i % cols
-            row = i // cols
+        # Designate leader at spawn_center
+        leader_id = "DRONE_01"
+        self.leader_id = leader_id
+        leader = Drone(
+            drone_id=leader_id,
+            position=np.copy(self.spawn_center),
+            role=DroneRole.LEADER,
+            battery=100.0,
+        )
+        self.drones[leader_id] = leader
 
-            offset = np.array(
-                [
-                    (col - cols / 2.0) * spacing + np.random.uniform(-0.3, 0.3),
-                    np.random.uniform(-0.2, 0.5),
-                    (row - cols / 2.0) * spacing + np.random.uniform(-0.3, 0.3),
-                ],
-                dtype=np.float64,
-            )
-            pos = self.spawn_center + offset
+        follower_count = count - 1
+        d = settings.formation_spacing
 
-            drone = Drone(
-                drone_id=drone_id,
-                position=pos,
-                role=DroneRole.FOLLOWER,
-                battery=100.0,
-            )
-            self.drones[drone_id] = drone
+        if formation == FormationType.CIRCLE and follower_count > 0:
+            radius = max(8.0, (follower_count * d) / (2.0 * np.pi))
+            angle_step = (2.0 * np.pi) / follower_count
+            for i in range(follower_count):
+                drone_id = f"DRONE_{i+2:02d}"
+                theta = i * angle_step
+                pos = self.spawn_center + np.array(
+                    [radius * np.cos(theta), 0.0, radius * np.sin(theta)], dtype=np.float64
+                )
+                self.drones[drone_id] = Drone(
+                    drone_id=drone_id,
+                    position=pos,
+                    role=DroneRole.FOLLOWER,
+                    battery=100.0,
+                )
 
-        # Designate first active drone as default initial leader
-        if self.drones:
-            first_id = list(self.drones.keys())[0]
-            self.drones[first_id].role = DroneRole.LEADER
-            self.leader_id = first_id
-            for drone in self.drones.values():
-                drone.leader_id = self.leader_id
+        elif formation == FormationType.V and follower_count > 0:
+            for i in range(follower_count):
+                drone_id = f"DRONE_{i+2:02d}"
+                wing = 1 if i % 2 == 0 else -1
+                rank = (i // 2) + 1
+                pos = self.spawn_center + np.array(
+                    [wing * rank * d, 0.0, -rank * d * 1.2], dtype=np.float64
+                )
+                self.drones[drone_id] = Drone(
+                    drone_id=drone_id,
+                    position=pos,
+                    role=DroneRole.FOLLOWER,
+                    battery=100.0,
+                )
+
+        elif formation == FormationType.LINE and follower_count > 0:
+            for i in range(follower_count):
+                drone_id = f"DRONE_{i+2:02d}"
+                side = 1 if i % 2 == 0 else -1
+                dist = ((i // 2) + 1) * d
+                pos = self.spawn_center + np.array([side * dist, 0.0, -2.0], dtype=np.float64)
+                self.drones[drone_id] = Drone(
+                    drone_id=drone_id,
+                    position=pos,
+                    role=DroneRole.FOLLOWER,
+                    battery=100.0,
+                )
+
+        elif formation == FormationType.GRID and follower_count > 0:
+            cols = int(np.ceil(np.sqrt(follower_count)))
+            for i in range(follower_count):
+                drone_id = f"DRONE_{i+2:02d}"
+                col = i % cols
+                row = i // cols
+                x_off = (col - (cols - 1) / 2.0) * d
+                z_off = -(row + 1) * d
+                pos = self.spawn_center + np.array([x_off, 0.0, z_off], dtype=np.float64)
+                self.drones[drone_id] = Drone(
+                    drone_id=drone_id,
+                    position=pos,
+                    role=DroneRole.FOLLOWER,
+                    battery=100.0,
+                )
+
+        else:
+            # General fallback jittered grid
+            cols = int(np.ceil(np.sqrt(count)))
+            spacing = 3.0
+            self.drones.clear()
+            for i in range(count):
+                drone_id = f"DRONE_{i+1:02d}"
+                col = i % cols
+                row = i // cols
+                offset = np.array(
+                    [
+                        (col - cols / 2.0) * spacing + np.random.uniform(-0.3, 0.3),
+                        np.random.uniform(-0.2, 0.5),
+                        (row - cols / 2.0) * spacing + np.random.uniform(-0.3, 0.3),
+                    ],
+                    dtype=np.float64,
+                )
+                pos = self.spawn_center + offset
+                drone = Drone(
+                    drone_id=drone_id,
+                    position=pos,
+                    role=DroneRole.FOLLOWER if i > 0 else DroneRole.LEADER,
+                    battery=100.0,
+                )
+                self.drones[drone_id] = drone
+            self.leader_id = "DRONE_01"
+
+        for drone in self.drones.values():
+            drone.leader_id = self.leader_id
 
     def get_leader(self) -> Optional[Drone]:
         if self.leader_id and self.leader_id in self.drones:

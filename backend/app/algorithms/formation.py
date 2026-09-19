@@ -1,10 +1,11 @@
 """
 Formation Controller for SwarmIQ.
 Calculates desired formation target slots relative to leader position and heading.
-Supports V-formation, Line, Grid, and Circle formations with smooth steering forces.
+Supports V-formation, Line, Grid, and Circle formations with persistent slot allocation
+and feedforward velocity tracking to maintain geometric perfection in flight.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import numpy as np
 
 from app.core.config import settings
@@ -20,6 +21,9 @@ class FormationController:
     ):
         self.formation_spacing = formation_spacing
         self.formation_weight = formation_weight
+        # Persistent slot assignments: {drone_id: slot_index}
+        self.persistent_slots: Dict[str, int] = {}
+        self.last_formation: Optional[FormationType] = None
 
     def compute_heading_matrix(self, velocity: np.ndarray, default_dir: np.ndarray) -> np.ndarray:
         """
@@ -77,13 +81,49 @@ class FormationController:
 
         elif formation_type == FormationType.CIRCLE:
             # Concentric ring formation around leader
-            radius = max(d * 2.2, (count * d) / (2.0 * np.pi))
+            radius = max(8.0, (count * d) / (2.0 * np.pi))
             angle_step = (2.0 * np.pi) / count if count > 0 else 0
             for i in range(count):
                 theta = i * angle_step
                 offsets.append(np.array([radius * np.cos(theta), 0.0, radius * np.sin(theta)], dtype=np.float64))
 
         return offsets
+
+    def _update_persistent_slots(
+        self, followers: List[Drone], leader: Drone, formation_type: FormationType
+    ) -> None:
+        """Assign slots persistently so drones never swap or oscillate between slots."""
+        current_ids: Set[str] = {f.id for f in followers}
+        cached_ids: Set[str] = set(self.persistent_slots.keys())
+
+        # Reassign if formation type changed or fleet membership changed
+        if formation_type != self.last_formation or current_ids != cached_ids:
+            self.persistent_slots.clear()
+            self.last_formation = formation_type
+
+            if formation_type == FormationType.CIRCLE:
+                # Assign circle slots by initial polar angle around leader in [0, 2*pi)
+                angles = [
+                    (
+                        f.id,
+                        float(
+                            np.arctan2(
+                                f.position[2] - leader.position[2],
+                                f.position[0] - leader.position[0],
+                            )
+                        )
+                        % (2.0 * np.pi),
+                    )
+                    for f in followers
+                ]
+                angles.sort(key=lambda item: item[1])
+                for idx, (drone_id, _) in enumerate(angles):
+                    self.persistent_slots[drone_id] = idx
+            else:
+                # Deterministic slot order for V, Line, Grid
+                sorted_drones = sorted(followers, key=lambda d: d.id)
+                for idx, drone in enumerate(sorted_drones):
+                    self.persistent_slots[drone.id] = idx
 
     def compute_formation_forces(
         self,
@@ -101,27 +141,26 @@ class FormationController:
         followers = [
             d
             for d in drones
-            if d.id != leader.id and d.status.value in ["ACTIVE", "RETURNING"] and d.role == DroneRole.FOLLOWER
+            if d.id != leader.id and d.status == DroneStatus.ACTIVE and d.role == DroneRole.FOLLOWER
         ]
         if not followers:
             return forces
 
-        # Special optimized non-distorting circular slot allocation
+        # Update slot assignments if needed (cached persistently)
+        self._update_persistent_slots(followers, leader, formation_type)
+
+        count = len(followers)
+        d = self.formation_spacing
+
+        # Circular formation handling
         if formation_type == FormationType.CIRCLE:
-            d = self.formation_spacing
-            count = len(followers)
-            radius = max(d * 2.2, (count * d) / (2.0 * np.pi))
-
-            # Sort followers by angular azimuth relative to leader to prevent path crossing
-            follower_angles = [
-                (f, float(np.arctan2(f.position[2] - leader.position[2], f.position[0] - leader.position[0])))
-                for f in followers
-            ]
-            follower_angles.sort(key=lambda item: item[1])
-
+            radius = max(8.0, (count * d) / (2.0 * np.pi))
             angle_step = (2.0 * np.pi) / count if count > 0 else 0
-            for idx, (follower, _) in enumerate(follower_angles):
-                theta = idx * angle_step
+
+            for follower in followers:
+                slot_idx = self.persistent_slots.get(follower.id, 0)
+                theta = slot_idx * angle_step
+
                 desired_position = np.array(
                     [
                         leader.position[0] + radius * np.cos(theta),
@@ -135,40 +174,56 @@ class FormationController:
                 to_slot = desired_position - follower.position
                 dist = np.linalg.norm(to_slot)
 
+                # Feedforward velocity from leader + spring correction to slot
+                feedforward_vel = leader.velocity
                 if dist > 0.05:
-                    desired_vel = (to_slot / dist) * min(follower.max_speed, dist * 2.5)
-                    steer = desired_vel - follower.velocity
-                    steer_norm = np.linalg.norm(steer)
-                    if steer_norm > settings.max_force:
-                        steer = (steer / steer_norm) * settings.max_force
+                    correction_speed = min(follower.max_speed * 0.7, dist * 2.0)
+                    slot_dir = to_slot / dist
+                    desired_vel = feedforward_vel + slot_dir * correction_speed
+                else:
+                    desired_vel = feedforward_vel
 
-                    # Higher weighting to overcome Boids cohesion inward pull
-                    forces[follower.id] = self.formation_weight * 1.6 * steer
-
-            return forces
-
-        # Heading orientation for directional formations (V, Line, Grid)
-        def_dir = target_dir if target_dir is not None else np.array([1.0, 0.0, 1.0])
-        rot_matrix = self.compute_heading_matrix(leader.velocity, def_dir)
-        offsets = self.generate_slot_offsets(len(followers), formation_type)
-
-        for i, follower in enumerate(followers):
-            local_offset = offsets[i]
-            world_offset = rot_matrix @ local_offset
-            desired_position = leader.position + world_offset
-
-            follower.target = desired_position
-
-            to_slot = desired_position - follower.position
-            dist = np.linalg.norm(to_slot)
-
-            if dist > 0.1:
-                desired_vel = (to_slot / dist) * min(follower.max_speed, dist * 2.0)
                 steer = desired_vel - follower.velocity
                 steer_norm = np.linalg.norm(steer)
                 if steer_norm > settings.max_force:
                     steer = (steer / steer_norm) * settings.max_force
 
-                forces[follower.id] = self.formation_weight * steer
+                forces[follower.id] = self.formation_weight * 2.0 * steer
+
+            return forces
+
+        # Directional formations: V, Line, Grid
+        def_dir = target_dir if target_dir is not None else np.array([1.0, 0.0, 1.0])
+        rot_matrix = self.compute_heading_matrix(leader.velocity, def_dir)
+        offsets = self.generate_slot_offsets(count, formation_type)
+
+        for follower in followers:
+            slot_idx = self.persistent_slots.get(follower.id, 0)
+            if slot_idx >= len(offsets):
+                slot_idx = len(offsets) - 1
+
+            local_offset = offsets[slot_idx]
+            world_offset = rot_matrix @ local_offset
+            desired_position = leader.position + world_offset
+
+            follower.target = desired_position
+            to_slot = desired_position - follower.position
+            dist = np.linalg.norm(to_slot)
+
+            # Feedforward velocity from leader + slot correction
+            feedforward_vel = leader.velocity
+            if dist > 0.1:
+                correction_speed = min(follower.max_speed * 0.6, dist * 2.0)
+                slot_dir = to_slot / dist
+                desired_vel = feedforward_vel + slot_dir * correction_speed
+            else:
+                desired_vel = feedforward_vel
+
+            steer = desired_vel - follower.velocity
+            steer_norm = np.linalg.norm(steer)
+            if steer_norm > settings.max_force:
+                steer = (steer / steer_norm) * settings.max_force
+
+            forces[follower.id] = self.formation_weight * steer
 
         return forces

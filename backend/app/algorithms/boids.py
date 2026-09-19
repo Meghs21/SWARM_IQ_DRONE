@@ -9,6 +9,7 @@ import numpy as np
 
 from app.core.config import settings
 from app.simulation.drone import Drone
+from app.models.schemas import DroneRole
 
 
 class BoidsEngine:
@@ -26,7 +27,9 @@ class BoidsEngine:
         self.separation_radius = separation_radius
         self.neighbor_radius = neighbor_radius
 
-    def compute_boids_forces(self, drones: List[Drone]) -> Dict[str, np.ndarray]:
+    def compute_boids_forces(
+        self, drones: List[Drone], cohesion_factor: float = 1.0
+    ) -> Dict[str, np.ndarray]:
         """
         Compute total Boids steering forces for all active drones using vectorized NumPy.
         Returns a mapping from drone_id to 3D force vector np.ndarray.
@@ -57,8 +60,7 @@ class BoidsEngine:
         # Mask where distance < separation_radius
         sep_mask = dist < self.separation_radius
         # Repulsive force proportional to 1 / (dist^2)
-        # Avoid divide by zero
-        safe_dist = np.where(sep_mask, dist, np.inf)
+        safe_dist = np.where(sep_mask, np.maximum(0.1, dist), 1.0)
         inv_dist_sq = np.where(sep_mask, 1.0 / (safe_dist**2), 0.0)[:, :, np.newaxis]
         # Force: sum_j (pos_i - pos_j) / dist_ij^2
         f_sep = np.sum(diff * inv_dist_sq, axis=1)  # (N, 3)
@@ -96,10 +98,13 @@ class BoidsEngine:
         total_boids = (
             self.separation_weight * f_sep
             + self.alignment_weight * f_align
-            + self.cohesion_weight * f_coh
+            + (self.cohesion_weight * cohesion_factor) * f_coh
         )
 
         for i, drone in enumerate(active_drones):
-            forces[drone.id] = total_boids[i]
+            if drone.role == DroneRole.LEADER:
+                forces[drone.id] = np.zeros(3, dtype=np.float64)
+            else:
+                forces[drone.id] = total_boids[i]
 
         return forces

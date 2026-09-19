@@ -20,10 +20,11 @@ class GoalNavigation:
         leader: Drone,
         current_waypoint: np.ndarray,
         slowdown_radius: float = 8.0,
+        followers: Optional[List[Drone]] = None,
     ) -> np.ndarray:
         """
         Compute Reynolds seek/arrival steering force for leader toward current waypoint.
-        F_steer = desired_velocity - current_velocity
+        Adapts cruise speed if followers are catching up or undergoing formation changes.
         """
         if leader.status != DroneStatus.ACTIVE:
             return np.zeros(3, dtype=np.float64)
@@ -36,11 +37,26 @@ class GoalNavigation:
 
         direction = to_target / distance
 
+        # Adaptive cruise factor: 65% base, throttles if followers are reforming
+        speed_factor = 0.65
+        if followers:
+            active_followers = [
+                f for f in followers if f.status == DroneStatus.ACTIVE and f.target is not None
+            ]
+            if active_followers:
+                max_error = max(float(np.linalg.norm(f.position - f.target)) for f in active_followers)
+                if max_error > 12.0:
+                    speed_factor = 0.30
+                elif max_error > 6.0:
+                    speed_factor = 0.45
+
+        cruise_speed = leader.max_speed * speed_factor
+
         # Arrival behavior: ramp down speed as leader nears the waypoint
         if distance < slowdown_radius:
-            desired_speed = leader.max_speed * (distance / slowdown_radius)
+            desired_speed = cruise_speed * (distance / slowdown_radius)
         else:
-            desired_speed = leader.max_speed
+            desired_speed = cruise_speed
 
         desired_velocity = direction * desired_speed
         steering_force = desired_velocity - leader.velocity

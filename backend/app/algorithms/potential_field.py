@@ -47,16 +47,15 @@ class PotentialField:
                 if surface_dist < self.influence_distance:
                     if surface_dist <= 0.0:
                         # Inside obstacle boundary: emergency escape repulsion
-                        scale = settings.max_force * 3.5
+                        scale = settings.max_force * 4.0
                     else:
-                        # Non-linear potential field gradient scaling up sharply near surface
-                        d_eff = max(0.15, surface_dist)
-                        scale = (
-                            self.repulsion_weight
-                            * (1.0 / d_eff - 1.0 / self.influence_distance)
-                            / (d_eff**1.5)
-                        )
-                        scale = min(scale, settings.max_force * 3.0)
+                        # Smooth quadratic ramp from influence edge with close-proximity surge
+                        norm_dist = surface_dist / self.influence_distance
+                        ramp = (1.0 - norm_dist) ** 2
+                        scale = ramp * (settings.max_force * 3.0)
+                        if surface_dist < 2.5:
+                            scale += (2.5 - surface_dist) * 8.0
+                        scale = min(scale, settings.max_force * 4.0)
 
                     # Dynamic obstacles push stronger
                     if obs.is_dynamic:

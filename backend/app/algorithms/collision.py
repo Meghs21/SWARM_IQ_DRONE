@@ -61,12 +61,11 @@ class CollisionAvoidance:
         # Repulsive evasion force for drones within safety radius
         evasion_mask = dist < self.safety_radius
 
-        # Avoid zero division
-        safe_dist = np.where(evasion_mask, dist, np.inf)
+        safe_dist = np.where(evasion_mask, np.maximum(0.1, dist), 1.0)
         # Strong hyperbolic repulsion: (1/dist - 1/r_safe) * (diff / dist)
         repulsion_scale = np.where(
             evasion_mask,
-            (1.0 / np.maximum(0.1, safe_dist) - 1.0 / self.safety_radius) / (safe_dist**2),
+            (1.0 / safe_dist - 1.0 / self.safety_radius) / (safe_dist**2),
             0.0,
         )[:, :, np.newaxis]
 

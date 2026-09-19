@@ -94,6 +94,7 @@ class SimulationEngine:
         self.swarm.initialize_drones(
             count=drone_count,
             spawn_center=self.mission.start_position,
+            formation=formation,
         )
         self.environment.clear_obstacles()
         self.replan_needed = True
@@ -183,7 +184,9 @@ class SimulationEngine:
         # If mission is running, calculate complete force synthesis
         if self.mission.status == MissionStatus.RUNNING:
             # 4. Calculate Boids forces (Separation, Alignment, Cohesion)
-            boids_forces = self.boids.compute_boids_forces(all_drones)
+            # Decouple cohesion when in geometric formation to prevent ring/wing collapse
+            cohesion_factor = 0.0 if self.mission.formation is not None else 1.0
+            boids_forces = self.boids.compute_boids_forces(all_drones, cohesion_factor=cohesion_factor)
 
             # 5. Calculate Formation forces
             leader = self.swarm.get_leader()
@@ -202,7 +205,9 @@ class SimulationEngine:
             if leader is not None:
                 current_wp = self.mission.get_current_waypoint()
                 if current_wp is not None:
-                    nav_forces[leader.id] = self.navigation.compute_leader_steering(leader, current_wp)
+                    nav_forces[leader.id] = self.navigation.compute_leader_steering(
+                        leader, current_wp, followers=all_drones
+                    )
 
             ret_forces = self.navigation.compute_returning_drones_steering(returning_drones)
             for did, f in ret_forces.items():
@@ -223,13 +228,19 @@ class SimulationEngine:
 
             # 9. Synthesize weighted forces and apply to drones
             for drone in active_drones:
-                total_force = (
-                    boids_forces.get(drone.id, np.zeros(3))
-                    + formation_forces.get(drone.id, np.zeros(3))
-                    + nav_forces.get(drone.id, np.zeros(3))
-                    + obs_forces.get(drone.id, np.zeros(3))
-                    + col_forces.get(drone.id, np.zeros(3))
-                )
+                b_force = boids_forces.get(drone.id, np.zeros(3))
+                f_force = formation_forces.get(drone.id, np.zeros(3))
+                n_force = nav_forces.get(drone.id, np.zeros(3))
+                o_force = obs_forces.get(drone.id, np.zeros(3))
+                c_force = col_forces.get(drone.id, np.zeros(3))
+
+                # Prioritize obstacle avoidance over formation keeping near obstacles
+                o_mag = np.linalg.norm(o_force)
+                if o_mag > 1.0:
+                    form_attenuation = max(0.05, 1.0 - (o_mag / (settings.max_force * 2.5)))
+                    f_force = f_force * form_attenuation
+
+                total_force = b_force + f_force + n_force + o_force + c_force
                 drone.apply_force(total_force)
 
         # 10. Advance drone kinematics and battery
@@ -237,17 +248,19 @@ class SimulationEngine:
 
         # Enforce physical obstacle boundary hulls (prevent passing through)
         if self.environment.obstacles:
+            hull_margin = 0.8
             for drone in active_drones:
                 for obs in self.environment.obstacles:
                     s_dist, away_vec = self.potential_field._distance_and_direction(drone.position, obs)
                     # If drone penetrates obstacle surface or touches hull margin
-                    if s_dist < 0.6:
-                        penetration = 0.6 - s_dist
+                    if s_dist < hull_margin:
+                        penetration = hull_margin - s_dist
                         drone.position += away_vec * penetration
                         # Deflect velocity: zero out velocity component heading towards obstacle
                         v_dot = np.dot(drone.velocity, away_vec)
                         if v_dot < 0:
                             drone.velocity -= v_dot * away_vec
+                            drone.velocity += away_vec * 1.5
 
         # 11. Update mission progression
         leader = self.swarm.get_leader()
