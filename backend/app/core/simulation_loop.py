@@ -235,6 +235,20 @@ class SimulationEngine:
         # 10. Advance drone kinematics and battery
         self.swarm.update(dt)
 
+        # Enforce physical obstacle boundary hulls (prevent passing through)
+        if self.environment.obstacles:
+            for drone in active_drones:
+                for obs in self.environment.obstacles:
+                    s_dist, away_vec = self.potential_field._distance_and_direction(drone.position, obs)
+                    # If drone penetrates obstacle surface or touches hull margin
+                    if s_dist < 0.6:
+                        penetration = 0.6 - s_dist
+                        drone.position += away_vec * penetration
+                        # Deflect velocity: zero out velocity component heading towards obstacle
+                        v_dot = np.dot(drone.velocity, away_vec)
+                        if v_dot < 0:
+                            drone.velocity -= v_dot * away_vec
+
         # 11. Update mission progression
         leader = self.swarm.get_leader()
         leader_pos = leader.position if leader else None

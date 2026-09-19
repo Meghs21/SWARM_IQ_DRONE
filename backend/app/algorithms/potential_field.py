@@ -4,7 +4,7 @@ Calculates local repulsive potential fields from static and dynamic obstacles.
 Operates seamlessly alongside Boids and global A* waypoints.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import numpy as np
 
 from app.core.config import settings
@@ -41,38 +41,40 @@ class PotentialField:
             total_repulsion = np.zeros(3, dtype=np.float64)
 
             for obs in obstacles:
-                # Calculate vector from obstacle surface to drone
+                # Calculate vector from obstacle surface to drone (signed distance)
                 surface_dist, away_dir = self._distance_and_direction(drone.position, obs)
 
-                if surface_dist < self.influence_distance and surface_dist > 0.05:
-                    # Non-linear potential field gradient
-                    scale = (
-                        self.repulsion_weight
-                        * (1.0 / surface_dist - 1.0 / self.influence_distance)
-                        / (surface_dist**2)
-                    )
-                    # Dynamic obstacles push slightly stronger in the direction of their velocity
+                if surface_dist < self.influence_distance:
+                    if surface_dist <= 0.0:
+                        # Inside obstacle boundary: emergency escape repulsion
+                        scale = settings.max_force * 3.5
+                    else:
+                        # Non-linear potential field gradient scaling up sharply near surface
+                        d_eff = max(0.15, surface_dist)
+                        scale = (
+                            self.repulsion_weight
+                            * (1.0 / d_eff - 1.0 / self.influence_distance)
+                            / (d_eff**1.5)
+                        )
+                        scale = min(scale, settings.max_force * 3.0)
+
+                    # Dynamic obstacles push stronger
                     if obs.is_dynamic:
-                        scale *= 1.4
+                        scale *= 1.5
 
                     total_repulsion += scale * away_dir
-
-            # Clamp repulsive force to prevent numerical explosion
-            force_norm = np.linalg.norm(total_repulsion)
-            if force_norm > settings.max_force * 1.5:
-                total_repulsion = (total_repulsion / force_norm) * (settings.max_force * 1.5)
 
             forces[drone.id] = total_repulsion
 
         return forces
 
-    def _distance_and_direction(self, point: np.ndarray, obs: Obstacle) -> tuple[float, np.ndarray]:
-        """Compute shortest distance from point to obstacle surface and unit away vector."""
+    def _distance_and_direction(self, point: np.ndarray, obs: Obstacle) -> Tuple[float, np.ndarray]:
+        """Compute signed distance from point to obstacle surface and unit away vector."""
         if obs.type == ObstacleType.SPHERE:
             diff = point - obs.position
             dist = np.linalg.norm(diff)
             radius = float(obs.size[0])
-            surface_dist = max(0.01, dist - radius)
+            surface_dist = dist - radius  # negative if inside
             away_dir = diff / max(1e-4, dist)
             return surface_dist, away_dir
 
@@ -84,24 +86,24 @@ class PotentialField:
             # Horizontal delta
             h_diff = np.array([point[0] - obs.position[0], 0.0, point[2] - obs.position[2]])
             h_dist = np.linalg.norm(h_diff)
-            h_surface_dist = max(0.01, h_dist - radius)
+            h_surface_dist = h_dist - radius  # negative if inside radius
 
-            # Vertical delta
+            # Vertical bounds
             y_min = obs.position[1]
             y_max = obs.position[1] + height
 
             if y_min <= point[1] <= y_max:
                 # Beside the cylinder
-                away_dir = h_diff / max(1e-4, h_dist)
+                away_dir = h_diff / max(1e-4, h_dist) if h_dist > 1e-4 else np.array([1.0, 0.0, 0.0])
                 return h_surface_dist, away_dir
             elif point[1] > y_max:
-                # Above cylinder
+                # Above cylinder top
                 v_dist = point[1] - y_max
                 away_dir = np.array([h_diff[0], v_dist, h_diff[2]])
                 total_dist = np.linalg.norm(away_dir)
                 return max(0.01, total_dist - radius * 0.5), away_dir / max(1e-4, total_dist)
             else:
-                # Below cylinder
+                # Below cylinder bottom
                 v_dist = y_min - point[1]
                 away_dir = np.array([h_diff[0], -v_dist, h_diff[2]])
                 total_dist = np.linalg.norm(away_dir)
@@ -121,7 +123,8 @@ class PotentialField:
                 min_axis = int(np.argmin(margins))
                 away_dir = np.zeros(3, dtype=np.float64)
                 away_dir[min_axis] = np.sign(diff[min_axis]) if diff[min_axis] != 0 else 1.0
-                return 0.05, away_dir
+                signed_dist = -float(margins[min_axis])
+                return signed_dist, away_dir
             return dist, vec_to_pt / dist
 
         return 100.0, np.zeros(3, dtype=np.float64)

@@ -191,8 +191,13 @@ class AStarPlanner:
         path.reverse()
         return path
 
-    def _line_of_sight(self, p1: np.ndarray, p2: np.ndarray, obstacles: List[Obstacle], num_samples: int = 15) -> bool:
+    def _line_of_sight(self, p1: np.ndarray, p2: np.ndarray, obstacles: List[Obstacle]) -> bool:
         """Check if straight line segment between p1 and p2 is collision free."""
+        dist = float(np.linalg.norm(p2 - p1))
+        if dist < 1e-3:
+            return True
+        # Dynamic sample density: at least every 1.2 meters to ensure no obstacle is skipped
+        num_samples = max(20, int(dist / 1.2))
         for alpha in np.linspace(0.0, 1.0, num_samples):
             test_pt = p1 + alpha * (p2 - p1)
             if self.is_point_in_obstacle(test_pt, obstacles):
