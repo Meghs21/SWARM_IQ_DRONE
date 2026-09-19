@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Play, Pause, RotateCcw, ShieldAlert, Cpu, Layers } from 'lucide-react'
+import { Play, Pause, RotateCcw, ShieldAlert, Cpu, Layers, Palette } from 'lucide-react'
 
-export default function Controls({ mission, leaderId, onRefresh }) {
+export default function Controls({ mission, leaderId, onRefresh, colorTheme = 'emerald', onColorThemeChange }) {
   const [droneCount, setDroneCount] = useState(50)
   const [loading, setLoading] = useState(false)
 
@@ -142,6 +142,38 @@ export default function Controls({ mission, leaderId, onRefresh }) {
               }`}
             >
               {count}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Follower Drone Color Palette */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between text-xs text-gray-400">
+          <span className="flex items-center gap-1.5">
+            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Drone Color
+          </span>
+          <span className="capitalize font-mono text-xs text-emerald-400 font-bold">{colorTheme}</span>
+        </div>
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            { id: 'emerald', bg: 'bg-emerald-500', label: 'Emerald' },
+            { id: 'violet', bg: 'bg-purple-500', label: 'Violet' },
+            { id: 'white', bg: 'bg-slate-200', label: 'White' },
+            { id: 'amber', bg: 'bg-orange-500', label: 'Amber' },
+            { id: 'cyan', bg: 'bg-cyan-400', label: 'Cyan' },
+          ].map((theme) => (
+            <button
+              key={theme.id}
+              onClick={() => onColorThemeChange && onColorThemeChange(theme.id)}
+              className={`h-7 rounded flex items-center justify-center transition-all border ${
+                colorTheme === theme.id
+                  ? 'border-white ring-2 ring-emerald-400/50 scale-105 shadow-md'
+                  : 'border-gray-700 hover:border-gray-500 opacity-70 hover:opacity-100'
+              }`}
+              title={theme.label}
+            >
+              <span className={`w-3.5 h-3.5 rounded-full ${theme.bg}`} />
             </button>
           ))}
         </div>

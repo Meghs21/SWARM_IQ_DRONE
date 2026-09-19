@@ -8,11 +8,12 @@ import { Radio, Wifi, WifiOff } from 'lucide-react'
 
 export default function Dashboard({ snapshot, isConnected }) {
   const [activeScenario, setActiveScenario] = useState(1)
+  const [droneColorTheme, setDroneColorTheme] = useState('emerald')
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-background">
       {/* 1. Fullscreen Three.js Simulation Canvas */}
-      <SceneView snapshot={snapshot} />
+      <SceneView snapshot={snapshot} colorTheme={droneColorTheme} />
 
       {/* 2. Floating Command Center Overlay UI (pointer-events-none on backdrop, pointer-events-auto on cards) */}
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-10">
@@ -54,6 +55,8 @@ export default function Dashboard({ snapshot, isConnected }) {
             <Controls
               mission={snapshot?.mission}
               leaderId={snapshot?.leader_id}
+              colorTheme={droneColorTheme}
+              onColorThemeChange={setDroneColorTheme}
             />
             <MissionPanel
               mission={snapshot?.mission}

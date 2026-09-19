@@ -16,6 +16,7 @@ export class DroneRenderer {
 
     // Map to track interpolated positions for smooth 60fps rendering
     this.droneInterpolations = new Map()
+    this.colorTheme = 'emerald'
 
     // 1. Follower Drones Instanced Mesh
     const droneGeometry = this.createDroneGeometry()
@@ -155,8 +156,19 @@ export class DroneRenderer {
         } else if (drone.status === 'RETURNING') {
           this.tempColor.setHex(0xf59e0b) // Amber
         } else {
-          // Cyan gradient according to battery
-          this.tempColor.setHex(drone.battery > 50 ? 0x06b6d4 : 0x3b82f6)
+          // Follower color theme
+          if (this.colorTheme === 'violet') {
+            this.tempColor.setHex(drone.battery > 50 ? 0xa855f7 : 0x7c3aed)
+          } else if (this.colorTheme === 'white') {
+            this.tempColor.setHex(drone.battery > 50 ? 0xf8fafc : 0x94a3b8)
+          } else if (this.colorTheme === 'amber') {
+            this.tempColor.setHex(drone.battery > 50 ? 0xf97316 : 0xd97706)
+          } else if (this.colorTheme === 'cyan') {
+            this.tempColor.setHex(drone.battery > 50 ? 0x06b6d4 : 0x0284c7)
+          } else {
+            // Default: Neon Emerald Green
+            this.tempColor.setHex(drone.battery > 50 ? 0x10b981 : 0x059669)
+          }
         }
         this.instancedMesh.setColorAt(followerIndex, this.tempColor)
         followerIndex++
@@ -178,6 +190,10 @@ export class DroneRenderer {
     if (this.instancedMesh.instanceColor) {
       this.instancedMesh.instanceColor.needsUpdate = true
     }
+  }
+
+  setColorTheme(theme) {
+    this.colorTheme = theme
   }
 
   cleanup() {

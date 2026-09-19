@@ -3,7 +3,7 @@ import { createSimulationScene } from '../three/scene'
 import { DroneRenderer } from '../three/drones'
 import { EnvironmentRenderer } from '../three/environment'
 
-export default function SceneView({ snapshot }) {
+export default function SceneView({ snapshot, colorTheme = 'emerald' }) {
   const containerRef = useRef(null)
   const droneRendererRef = useRef(null)
   const envRendererRef = useRef(null)
@@ -18,6 +18,7 @@ export default function SceneView({ snapshot }) {
 
     // 2. Initialize Renderers
     const droneRenderer = new DroneRenderer(ctx.scene, 150)
+    droneRenderer.setColorTheme(colorTheme)
     droneRendererRef.current = droneRenderer
 
     const envRenderer = new EnvironmentRenderer(ctx.scene)
@@ -39,6 +40,13 @@ export default function SceneView({ snapshot }) {
       ctx.cleanup()
     }
   }, [])
+
+  // Update color theme when changed
+  useEffect(() => {
+    if (droneRendererRef.current) {
+      droneRendererRef.current.setColorTheme(colorTheme)
+    }
+  }, [colorTheme])
 
   // Update 3D renderers on each WebSocket snapshot
   useEffect(() => {
