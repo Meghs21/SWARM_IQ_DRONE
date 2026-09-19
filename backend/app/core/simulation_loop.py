@@ -68,9 +68,9 @@ class SimulationEngine:
             self._subscribers.remove(callback)
 
     def start(self) -> None:
+        self.mission.start()
         if not self.is_running:
             self.is_running = True
-            self.mission.start()
             try:
                 loop = asyncio.get_running_loop()
                 self._task = loop.create_task(self._run_loop())

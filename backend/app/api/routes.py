@@ -107,6 +107,16 @@ async def trigger_drone_failure(drone_id: str) -> Dict[str, Any]:
     was_leader = (drone.id == engine.swarm.leader_id)
     drone.fail()
 
+    if was_leader:
+        new_id, _ = engine.leader_election.elect_leader(
+            list(engine.swarm.drones.values()),
+            engine.mission.target_position,
+            engine.swarm.leader_id,
+        )
+        if new_id:
+            engine.swarm.set_leader(new_id)
+            engine.replan_needed = True
+
     return {
         "status": "failed",
         "drone_id": drone_id,
