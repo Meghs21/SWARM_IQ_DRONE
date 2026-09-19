@@ -23,30 +23,26 @@ class FormationController:
 
     def compute_heading_matrix(self, velocity: np.ndarray, default_dir: np.ndarray) -> np.ndarray:
         """
-        Construct 3D orthonormal rotation matrix R = [right, up, forward]
-        aligned with forward velocity heading.
+        Construct horizontal planar rotation matrix aligned with forward heading (XZ plane).
+        Prevents awkward pitch tilting during climb/descent.
         """
-        speed = np.linalg.norm(velocity)
+        speed = np.hypot(velocity[0], velocity[2])
         if speed > 0.5:
-            forward = velocity / speed
+            forward = np.array([velocity[0], 0.0, velocity[2]], dtype=np.float64) / speed
         else:
-            default_norm = np.linalg.norm(default_dir)
-            forward = default_dir / default_norm if default_norm > 1e-3 else np.array([0.0, 0.0, 1.0])
+            h_len = np.hypot(default_dir[0], default_dir[2])
+            forward = (
+                np.array([default_dir[0], 0.0, default_dir[2]], dtype=np.float64) / h_len
+                if h_len > 1e-3
+                else np.array([0.0, 0.0, 1.0], dtype=np.float64)
+            )
 
-        # Global up vector
         global_up = np.array([0.0, 1.0, 0.0])
-
-        # Right vector perpendicular to forward and up
         right = np.cross(global_up, forward)
-        right_norm = np.linalg.norm(right)
-        if right_norm < 1e-3:
-            # Forward is pointing straight up or down; pick alternate reference
-            right = np.array([1.0, 0.0, 0.0])
-        else:
-            right = right / right_norm
+        r_norm = np.linalg.norm(right)
+        right = right / r_norm if r_norm > 1e-3 else np.array([1.0, 0.0, 0.0])
+        up = global_up
 
-        up = np.cross(forward, right)
-        # Columns: [right, up, forward]
         return np.column_stack((right, up, forward))
 
     def generate_slot_offsets(self, count: int, formation_type: FormationType) -> List[np.ndarray]:
@@ -81,7 +77,7 @@ class FormationController:
 
         elif formation_type == FormationType.CIRCLE:
             # Concentric ring formation around leader
-            radius = max(d * 1.5, (count * d) / (2.0 * np.pi))
+            radius = max(d * 2.2, (count * d) / (2.0 * np.pi))
             angle_step = (2.0 * np.pi) / count if count > 0 else 0
             for i in range(count):
                 theta = i * angle_step
@@ -110,26 +106,63 @@ class FormationController:
         if not followers:
             return forces
 
-        # Heading orientation
+        # Special optimized non-distorting circular slot allocation
+        if formation_type == FormationType.CIRCLE:
+            d = self.formation_spacing
+            count = len(followers)
+            radius = max(d * 2.2, (count * d) / (2.0 * np.pi))
+
+            # Sort followers by angular azimuth relative to leader to prevent path crossing
+            follower_angles = [
+                (f, float(np.arctan2(f.position[2] - leader.position[2], f.position[0] - leader.position[0])))
+                for f in followers
+            ]
+            follower_angles.sort(key=lambda item: item[1])
+
+            angle_step = (2.0 * np.pi) / count if count > 0 else 0
+            for idx, (follower, _) in enumerate(follower_angles):
+                theta = idx * angle_step
+                desired_position = np.array(
+                    [
+                        leader.position[0] + radius * np.cos(theta),
+                        leader.position[1],
+                        leader.position[2] + radius * np.sin(theta),
+                    ],
+                    dtype=np.float64,
+                )
+
+                follower.target = desired_position
+                to_slot = desired_position - follower.position
+                dist = np.linalg.norm(to_slot)
+
+                if dist > 0.05:
+                    desired_vel = (to_slot / dist) * min(follower.max_speed, dist * 2.5)
+                    steer = desired_vel - follower.velocity
+                    steer_norm = np.linalg.norm(steer)
+                    if steer_norm > settings.max_force:
+                        steer = (steer / steer_norm) * settings.max_force
+
+                    # Higher weighting to overcome Boids cohesion inward pull
+                    forces[follower.id] = self.formation_weight * 1.6 * steer
+
+            return forces
+
+        # Heading orientation for directional formations (V, Line, Grid)
         def_dir = target_dir if target_dir is not None else np.array([1.0, 0.0, 1.0])
         rot_matrix = self.compute_heading_matrix(leader.velocity, def_dir)
         offsets = self.generate_slot_offsets(len(followers), formation_type)
 
         for i, follower in enumerate(followers):
             local_offset = offsets[i]
-            # Transform local slot offset by leader heading rotation: world_offset = R * local_offset
             world_offset = rot_matrix @ local_offset
             desired_position = leader.position + world_offset
 
-            # Assign target position to follower for visualization
             follower.target = desired_position
 
-            # Spring-damper formation steering force
             to_slot = desired_position - follower.position
             dist = np.linalg.norm(to_slot)
 
             if dist > 0.1:
-                # Seek slot with velocity damping
                 desired_vel = (to_slot / dist) * min(follower.max_speed, dist * 2.0)
                 steer = desired_vel - follower.velocity
                 steer_norm = np.linalg.norm(steer)
