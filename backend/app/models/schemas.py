@@ -109,6 +109,10 @@ class FormationChangeRequest(BaseModel):
     formation: FormationType
 
 
+class FleetSizeChangeRequest(BaseModel):
+    drone_count: int = Field(default=50, ge=1, le=150)
+
+
 class SimulationSnapshot(BaseModel):
     type: str = "simulation_state"
     timestamp: float

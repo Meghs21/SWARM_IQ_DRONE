@@ -346,9 +346,9 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
     story.append(PageBreak())
 
     # ==========================
-    # 3. THE 5 CORE AUTONOMOUS ALGORITHMS
+    # 3. THE 6 CORE AUTONOMOUS ALGORITHMS
     # ==========================
-    story.append(Paragraph("3. The Five Core Autonomous Algorithms (Explain to Teacher)", h1_style))
+    story.append(Paragraph("3. The Six Core Autonomous Algorithms (Explain to Teacher)", h1_style))
     story.append(HRFlowable(width="100%", thickness=1, color=ACCENT_GREEN, spaceAfter=8))
 
     story.append(
@@ -367,7 +367,7 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
         ],
         [
             Paragraph("<b>1. Reynolds Boids Flocking</b>", table_cell_bold),
-            Paragraph("Bio-inspired bird flocking: keeps drones moving as a cohesive group without clumping.", table_cell_style),
+            Paragraph("Bio-inspired flocking: keeps drones moving as a cohesive group without clumping.", table_cell_style),
             Paragraph("Vectorized O(N²) NumPy implementation: Separation (1/r²), Alignment (velocity matching), Cohesion (center of mass). Decoupled in formation flight so geometry is preserved.", table_cell_style),
         ],
         [
@@ -390,8 +390,13 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
             Paragraph("Democratic fleet election: picks the best drone as captain; auto-replaces it on failure.", table_cell_style),
             Paragraph("Multi-factor fitness function: Score = 35% Battery + 30% Distance + 20% Connectivity + 15% Health. Instant 1-tick failover when battery < 20% or on hardware failure.", table_cell_style),
         ],
+        [
+            Paragraph("<b>6. Drone-to-Drone Collision Avoidance</b>", table_cell_bold),
+            Paragraph("Emergency close-range bubble: prevents drones from colliding with peer drones in the swarm.", table_cell_style),
+            Paragraph("Hyperbolic proximity repulsion under 2.0m (F_evade = k * (1/d - 1/r_safe)/d² * Δpos). Vectorized pairwise distance matrix with 3-tier event tracking: Warnings (3m), Near-Misses (2m), Collisions (0.6m).", table_cell_style),
+        ],
     ]
-    atab = Table(algo_table_data, colWidths=[125, 185, 230])
+    atab = Table(algo_table_data, colWidths=[125, 180, 235])
     atab.setStyle(
         TableStyle(
             [
@@ -399,15 +404,15 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
                 ("BOX", (0, 0), (-1, -1), 0.5, CARD_BORDER),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, CARD_BORDER),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, BG_LIGHT]),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
             ]
         )
     )
     story.append(atab)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 6))
 
     # Detailed APF Deep-Dive Box
     apf_data = [
@@ -458,7 +463,7 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
         [
             Paragraph("<b>Fleet Size Selector</b>", table_cell_bold),
             Paragraph("<b>20, 50, or 100 Drones</b>", table_cell_style),
-            Paragraph("In Scenarios 1 to 4 (and custom missions), you can toggle between 20, 50, or 100 drones at any time. Scenario 5 is the dedicated 100-Drone Large Swarm stress test.", table_cell_style),
+            Paragraph("Available across <b>ALL 5 MODES</b> and custom missions! You can switch between 20, 50, or 100 drones at any time. Scenario obstacles are preserved and drones re-slot dynamically.", table_cell_style),
         ],
         [
             Paragraph("<b>Formation Selector</b>", table_cell_bold),
@@ -528,7 +533,7 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
         ],
         [
             Paragraph("<b>5. 100-Drone Swarm</b>", table_cell_bold),
-            Paragraph("100 Drones • Circle<br/>(Can switch V/Line/Grid/Circle)", table_cell_style),
+            Paragraph("100 Drones • Circle<br/>(Can switch 20/50/100 & V/Line/Grid/Circle)", table_cell_style),
             Paragraph("Full-scale stress test. 100 drones forming a 55m ring. Demonstrates 60 FPS Three.js InstancedMesh performance.", table_cell_style),
         ],
     ]
@@ -598,7 +603,7 @@ def build_pdf(filename="SwarmIQ_Project_Report.pdf"):
 
     story.append(
         Paragraph(
-            "SwarmIQ successfully fulfills all requirements of a real-time, software-based autonomous drone swarm simulator. All 36 automated test cases pass cleanly, verified across mathematical accuracy, dynamic failover, obstacle avoidance, and high-frequency WebSocket streaming. The complete source code is modular, well-documented, and hosted on GitHub at <b>https://github.com/Meghs21/SWARM_IQ_DRONE</b>.",
+            "SwarmIQ successfully fulfills all requirements of a real-time, software-based autonomous drone swarm simulator. All 37 automated test cases pass cleanly, verified across mathematical accuracy, dynamic failover, obstacle avoidance, and high-frequency WebSocket streaming. The complete source code is modular, well-documented, and hosted on GitHub at <b>https://github.com/Meghs21/SWARM_IQ_DRONE</b>.",
             body_style,
         )
     )

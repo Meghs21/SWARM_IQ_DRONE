@@ -58,6 +58,7 @@ class SimulationEngine:
 
         # Path planning state
         self.replan_needed: bool = True
+        self.current_scenario: Optional[int] = None
 
     def register_subscriber(self, callback: Callable[[SimulationSnapshot], None]) -> None:
         if callback not in self._subscribers:
@@ -89,6 +90,7 @@ class SimulationEngine:
         start_pos: Optional[np.ndarray] = None,
         target_pos: Optional[np.ndarray] = None,
         formation: FormationType = FormationType.V,
+        clear_obstacles: bool = True,
     ) -> None:
         self.mission.reset(start_pos=start_pos, target_pos=target_pos, formation=formation)
         self.swarm.initialize_drones(
@@ -96,11 +98,73 @@ class SimulationEngine:
             spawn_center=self.mission.start_position,
             formation=formation,
         )
-        self.environment.clear_obstacles()
+        if clear_obstacles:
+            self.environment.clear_obstacles()
+            self.current_scenario = None
+        self.formation.persistent_slots.clear()
+        self.formation.last_formation = None
         self.replan_needed = True
+
+    def set_drone_count(self, count: int) -> None:
+        """Dynamically resize fleet while preserving scenario obstacles and mission progress."""
+        if count <= 0:
+            return
+
+        leader = self.swarm.get_leader()
+        if self.mission.status in [MissionStatus.RUNNING, MissionStatus.PAUSED] and leader is not None:
+            current_drones = self.swarm.drones
+            if count == len(current_drones):
+                return
+            if count < len(current_drones):
+                followers = [d for d in current_drones.values() if d.id != leader.id]
+                followers.sort(key=lambda d: np.linalg.norm(d.position - leader.position))
+                kept_followers = followers[: count - 1]
+                self.swarm.drones = {leader.id: leader}
+                for f in kept_followers:
+                    self.swarm.drones[f.id] = f
+            else:
+                needed = count - len(current_drones)
+                existing_indices = set()
+                for did in current_drones.keys():
+                    try:
+                        num = int(did.replace("DRONE_", ""))
+                        existing_indices.add(num)
+                    except ValueError:
+                        pass
+                next_idx = 1
+                for _ in range(needed):
+                    while next_idx in existing_indices:
+                        next_idx += 1
+                    existing_indices.add(next_idx)
+                    drone_id = f"DRONE_{next_idx:02d}"
+                    offset = np.random.uniform(-4.0, 4.0, size=3)
+                    offset[1] = np.random.uniform(-0.5, 0.5)
+                    from app.simulation.drone import Drone
+                    from app.models.schemas import DroneRole
+                    new_drone = Drone(
+                        drone_id=drone_id,
+                        position=leader.position + offset,
+                        role=DroneRole.FOLLOWER,
+                        battery=100.0,
+                    )
+                    self.swarm.drones[drone_id] = new_drone
+            self.formation.persistent_slots.clear()
+            self.formation.last_formation = None
+        else:
+            spawn_center = self.mission.start_position if self.mission else np.array([-60.0, 10.0, -60.0])
+            self.swarm.initialize_drones(
+                count=count,
+                spawn_center=spawn_center,
+                formation=self.mission.formation,
+            )
+            self.formation.persistent_slots.clear()
+            self.formation.last_formation = None
+            self.replan_needed = True
 
     def set_formation(self, formation: FormationType) -> None:
         self.mission.formation = formation
+        self.formation.persistent_slots.clear()
+        self.formation.last_formation = None
 
     def replan_leader_path(self) -> None:
         """Trigger A* path planner from leader position to destination."""
@@ -269,14 +333,17 @@ class SimulationEngine:
 
     def load_scenario(self, scenario_id: int) -> None:
         """Preset scenario initialization."""
+        self.current_scenario = scenario_id
         if scenario_id == 1:
             # Scenario 1 - Open Field (20 drones, No obstacles, V formation)
-            self.reset(drone_count=20, formation=FormationType.V)
+            self.reset(drone_count=20, formation=FormationType.V, clear_obstacles=True)
+            self.current_scenario = 1
             self.replan_leader_path()
 
         elif scenario_id == 2:
             # Scenario 2 - Obstacle Course (50 drones, static pillars, A* path)
-            self.reset(drone_count=50, formation=FormationType.V)
+            self.reset(drone_count=50, formation=FormationType.V, clear_obstacles=True)
+            self.current_scenario = 2
             # Add static pillars
             self.environment.add_obstacle(
                 Obstacle("PILLAR_1", ObstacleType.CYLINDER, [-20.0, 0.0, -20.0], [8.0, 40.0, 0.0])
@@ -291,7 +358,8 @@ class SimulationEngine:
 
         elif scenario_id == 3:
             # Scenario 3 - Dynamic Obstacles (50 drones, moving obstacles)
-            self.reset(drone_count=50, formation=FormationType.LINE)
+            self.reset(drone_count=50, formation=FormationType.LINE, clear_obstacles=True)
+            self.current_scenario = 3
             self.environment.add_obstacle(
                 Obstacle(
                     "DYN_SPHERE_1",
@@ -319,7 +387,8 @@ class SimulationEngine:
 
         elif scenario_id == 4:
             # Scenario 4 - Leader Failure (50 drones, leader fails during mission)
-            self.reset(drone_count=50, formation=FormationType.GRID)
+            self.reset(drone_count=50, formation=FormationType.GRID, clear_obstacles=True)
+            self.current_scenario = 4
             self.environment.add_obstacle(
                 Obstacle("BLOCK_1", ObstacleType.BOX, [-10.0, 10.0, -10.0], [10.0, 20.0, 10.0])
             )
@@ -327,7 +396,8 @@ class SimulationEngine:
 
         elif scenario_id == 5:
             # Scenario 5 - Large Swarm (100 drones, complex environment)
-            self.reset(drone_count=100, formation=FormationType.CIRCLE)
+            self.reset(drone_count=100, formation=FormationType.CIRCLE, clear_obstacles=True)
+            self.current_scenario = 5
             self.environment.add_obstacle(
                 Obstacle("TOWER_1", ObstacleType.CYLINDER, [-30.0, 0.0, -10.0], [7.0, 45.0, 0.0])
             )

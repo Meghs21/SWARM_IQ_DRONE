@@ -55,6 +55,7 @@ export default function Dashboard({ snapshot, isConnected }) {
             <Controls
               mission={snapshot?.mission}
               leaderId={snapshot?.leader_id}
+              totalDrones={snapshot?.metrics?.total_drones || snapshot?.drones?.length}
               colorTheme={droneColorTheme}
               onColorThemeChange={setDroneColorTheme}
             />

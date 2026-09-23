@@ -1,9 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Play, Pause, RotateCcw, ShieldAlert, Cpu, Layers, Palette } from 'lucide-react'
 
-export default function Controls({ mission, leaderId, onRefresh, colorTheme = 'emerald', onColorThemeChange }) {
-  const [droneCount, setDroneCount] = useState(50)
+export default function Controls({ mission, leaderId, totalDrones, onRefresh, colorTheme = 'emerald', onColorThemeChange }) {
+  const [droneCount, setDroneCount] = useState(totalDrones || 50)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (totalDrones) {
+      setDroneCount(totalDrones)
+    }
+  }, [totalDrones])
 
   const isRunning = mission?.status === 'RUNNING'
   const isPaused = mission?.status === 'PAUSED'
@@ -46,14 +52,11 @@ export default function Controls({ mission, leaderId, onRefresh, colorTheme = 'e
     })
   }
 
-  const handleCreateMission = (count) => {
+  const handleFleetSizeChange = (count) => {
     setDroneCount(count)
-    callApi('mission/create', {
+    callApi('config/fleet-size', {
       method: 'POST',
-      body: JSON.stringify({
-        drone_count: count,
-        formation: mission?.formation || 'V',
-      }),
+      body: JSON.stringify({ drone_count: count }),
     })
   }
 
@@ -134,10 +137,10 @@ export default function Controls({ mission, leaderId, onRefresh, colorTheme = 'e
           {[20, 50, 100].map((count) => (
             <button
               key={count}
-              onClick={() => handleCreateMission(count)}
+              onClick={() => handleFleetSizeChange(count)}
               className={`py-1 rounded text-xs font-mono transition-all ${
                 droneCount === count
-                  ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
+                  ? 'bg-cyan-950 border border-cyan-500 text-cyan-300 font-bold shadow-[0_0_8px_rgba(6,182,212,0.3)]'
                   : 'bg-gray-800/60 hover:bg-gray-800 text-gray-400 border border-gray-700/50'
               }`}
             >

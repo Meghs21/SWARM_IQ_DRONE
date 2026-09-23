@@ -10,6 +10,7 @@ from app.core.simulation_loop import engine
 from app.models.schemas import (
     MissionCreateRequest,
     FormationChangeRequest,
+    FleetSizeChangeRequest,
     MissionState,
     SimulationMetrics,
     SimulationSnapshot,
@@ -29,11 +30,13 @@ async def create_mission(req: MissionCreateRequest) -> Dict[str, Any]:
     target_pos = req.target.to_list() if req.target else None
     start_pos = req.start_position.to_list() if req.start_position else None
 
+    clear_obs = len(engine.environment.obstacles) == 0
     engine.reset(
         drone_count=req.drone_count,
         start_pos=start_pos,
         target_pos=target_pos,
         formation=req.formation,
+        clear_obstacles=clear_obs,
     )
     return {"status": "created", "mission": engine.mission.to_state()}
 
@@ -58,7 +61,10 @@ async def resume_mission() -> Dict[str, str]:
 
 @router.post("/mission/reset")
 async def reset_mission() -> Dict[str, str]:
-    engine.reset()
+    if engine.current_scenario is not None:
+        engine.load_scenario(engine.current_scenario)
+    else:
+        engine.reset()
     return {"status": "reset"}
 
 
@@ -96,6 +102,16 @@ async def load_scenario(
 async def update_formation(req: FormationChangeRequest) -> Dict[str, str]:
     engine.set_formation(req.formation)
     return {"status": "updated", "formation": req.formation}
+
+
+@router.post("/config/fleet-size")
+async def update_fleet_size(req: FleetSizeChangeRequest) -> Dict[str, Any]:
+    engine.set_drone_count(req.drone_count)
+    return {
+        "status": "updated",
+        "drone_count": len(engine.swarm.drones),
+        "obstacle_count": len(engine.environment.obstacles),
+    }
 
 
 @router.post("/drone/{drone_id}/fail")
