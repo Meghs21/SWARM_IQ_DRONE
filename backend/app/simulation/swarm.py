@@ -57,7 +57,19 @@ class Swarm:
         self.drones[leader_id] = leader
 
         follower_count = count - 1
-        d = settings.formation_spacing
+        if follower_count > 60:
+            d = max(1.8, settings.formation_spacing * 0.50)
+        elif follower_count > 30:
+            d = max(2.2, settings.formation_spacing * 0.65)
+        else:
+            d = settings.formation_spacing
+
+        # Planar forward heading matrix aligned with path (XZ plane)
+        def_dir = np.array([1.0, 0.0, 1.0])
+        h_len = np.hypot(def_dir[0], def_dir[2])
+        fwd = np.array([def_dir[0], 0.0, def_dir[2]], dtype=np.float64) / h_len
+        right = np.cross(np.array([0.0, 1.0, 0.0]), fwd)
+        rot_mat = np.column_stack((right, np.array([0.0, 1.0, 0.0]), fwd))
 
         if formation == FormationType.CIRCLE and follower_count > 0:
             radius = max(8.0, (follower_count * d) / (2.0 * np.pi))
@@ -80,9 +92,8 @@ class Swarm:
                 drone_id = f"DRONE_{i+2:02d}"
                 wing = 1 if i % 2 == 0 else -1
                 rank = (i // 2) + 1
-                pos = self.spawn_center + np.array(
-                    [wing * rank * d, 0.0, -rank * d * 1.2], dtype=np.float64
-                )
+                local_off = np.array([wing * rank * d, 0.0, -rank * d * 0.8], dtype=np.float64)
+                pos = self.spawn_center + (rot_mat @ local_off)
                 self.drones[drone_id] = Drone(
                     drone_id=drone_id,
                     position=pos,
@@ -95,7 +106,8 @@ class Swarm:
                 drone_id = f"DRONE_{i+2:02d}"
                 side = 1 if i % 2 == 0 else -1
                 dist = ((i // 2) + 1) * d
-                pos = self.spawn_center + np.array([side * dist, 0.0, -2.0], dtype=np.float64)
+                local_off = np.array([side * dist, 0.0, -2.0], dtype=np.float64)
+                pos = self.spawn_center + (rot_mat @ local_off)
                 self.drones[drone_id] = Drone(
                     drone_id=drone_id,
                     position=pos,
@@ -111,7 +123,8 @@ class Swarm:
                 row = i // cols
                 x_off = (col - (cols - 1) / 2.0) * d
                 z_off = -(row + 1) * d
-                pos = self.spawn_center + np.array([x_off, 0.0, z_off], dtype=np.float64)
+                local_off = np.array([x_off, 0.0, z_off], dtype=np.float64)
+                pos = self.spawn_center + (rot_mat @ local_off)
                 self.drones[drone_id] = Drone(
                     drone_id=drone_id,
                     position=pos,

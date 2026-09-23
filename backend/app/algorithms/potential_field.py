@@ -61,7 +61,27 @@ class PotentialField:
                     if obs.is_dynamic:
                         scale *= 1.5
 
-                    total_repulsion += scale * away_dir
+                    repulsion_vec = scale * away_dir
+
+                    # Tangential Vortex Force (curling force around obstacle to bypass deadlocks)
+                    des_dir = (
+                        (drone.target - drone.position)
+                        if drone.target is not None
+                        else (drone.velocity if np.linalg.norm(drone.velocity) > 0.1 else None)
+                    )
+                    if des_dir is not None and np.linalg.norm(des_dir) > 1e-3:
+                        up_vec = np.array([0.0, 1.0, 0.0])
+                        tangent = np.cross(up_vec, away_dir)
+                        t_norm = np.linalg.norm(tangent)
+                        if t_norm > 1e-3:
+                            tangent = tangent / t_norm
+                            if np.dot(tangent, des_dir) < 0:
+                                tangent = -tangent
+                            total_repulsion += repulsion_vec + (scale * 0.9) * tangent
+                        else:
+                            total_repulsion += repulsion_vec
+                    else:
+                        total_repulsion += repulsion_vec
 
             forces[drone.id] = total_repulsion
 

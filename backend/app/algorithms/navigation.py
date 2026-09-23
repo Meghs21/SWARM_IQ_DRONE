@@ -37,7 +37,7 @@ class GoalNavigation:
 
         direction = to_target / distance
 
-        # Adaptive cruise factor: 65% base, throttles if followers are reforming
+        # Adaptive cruise factor: 65% base, throttles smoothly if followers are reforming or avoiding hazards
         speed_factor = 0.65
         if followers:
             active_followers = [
@@ -45,9 +45,11 @@ class GoalNavigation:
             ]
             if active_followers:
                 max_error = max(float(np.linalg.norm(f.position - f.target)) for f in active_followers)
-                if max_error > 12.0:
+                if max_error > 25.0:
+                    speed_factor = 0.15  # Patiently wait if swarm is navigating large obstacle
+                elif max_error > 15.0:
                     speed_factor = 0.30
-                elif max_error > 6.0:
+                elif max_error > 8.0:
                     speed_factor = 0.45
 
         cruise_speed = leader.max_speed * speed_factor

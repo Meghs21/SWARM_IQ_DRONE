@@ -13,9 +13,9 @@ class SimulationConfig(BaseModel):
     time_step: float = Field(default=0.04, description="Physics delta time dt in seconds (1/25)")
 
     # Environment Bounds: [min_x, max_x], [min_y, max_y], [min_z, max_z]
-    bounds_x: Tuple[float, float] = (-100.0, 100.0)
+    bounds_x: Tuple[float, float] = (-250.0, 250.0)
     bounds_y: Tuple[float, float] = (0.5, 60.0)  # Drone flight altitude
-    bounds_z: Tuple[float, float] = (-100.0, 100.0)
+    bounds_z: Tuple[float, float] = (-250.0, 250.0)
 
     # Drone Physical Constraints
     default_drone_count: int = 50

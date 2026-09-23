@@ -324,7 +324,15 @@ class SimulationEngine:
                         v_dot = np.dot(drone.velocity, away_vec)
                         if v_dot < 0:
                             drone.velocity -= v_dot * away_vec
-                            drone.velocity += away_vec * 1.5
+                            # Tangential slide along obstacle boundary to maintain forward momentum
+                            up_dir = np.array([0.0, 1.0, 0.0])
+                            tangent = np.cross(up_dir, away_vec)
+                            t_len = np.linalg.norm(tangent)
+                            if t_len > 1e-3:
+                                tangent = tangent / t_len
+                                if np.dot(tangent, drone.velocity) < 0:
+                                    tangent = -tangent
+                                drone.velocity += tangent * 1.5
 
         # 11. Update mission progression
         leader = self.swarm.get_leader()

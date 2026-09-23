@@ -52,15 +52,20 @@ class FormationController:
     def generate_slot_offsets(self, count: int, formation_type: FormationType) -> List[np.ndarray]:
         """Generate local relative offsets for followers."""
         offsets: List[np.ndarray] = []
-        d = self.formation_spacing
+        if count > 60:
+            d = max(1.8, self.formation_spacing * 0.50)
+        elif count > 30:
+            d = max(2.2, self.formation_spacing * 0.65)
+        else:
+            d = self.formation_spacing
 
         if formation_type == FormationType.V:
             # V-wing formation: alternates left and right wings trailing behind
             for i in range(count):
                 wing = 1 if i % 2 == 0 else -1
                 rank = (i // 2) + 1
-                # right offset = wing * rank * d, forward offset = -rank * d * 1.2
-                offsets.append(np.array([wing * rank * d, 0.0, -rank * d * 1.2], dtype=np.float64))
+                # right offset = wing * rank * d, forward offset = -rank * d * 0.8
+                offsets.append(np.array([wing * rank * d, 0.0, -rank * d * 0.8], dtype=np.float64))
 
         elif formation_type == FormationType.LINE:
             # Rank formation: line perpendicular to heading
@@ -177,7 +182,7 @@ class FormationController:
                 # Feedforward velocity from leader + spring correction to slot
                 feedforward_vel = leader.velocity
                 if dist > 0.05:
-                    correction_speed = min(follower.max_speed * 0.7, dist * 2.0)
+                    correction_speed = min(follower.max_speed, max(1.5, dist * 2.2))
                     slot_dir = to_slot / dist
                     desired_vel = feedforward_vel + slot_dir * correction_speed
                 else:
@@ -185,8 +190,9 @@ class FormationController:
 
                 steer = desired_vel - follower.velocity
                 steer_norm = np.linalg.norm(steer)
-                if steer_norm > settings.max_force:
-                    steer = (steer / steer_norm) * settings.max_force
+                max_f = settings.max_force * 1.5 if dist > 8.0 else settings.max_force
+                if steer_norm > max_f:
+                    steer = (steer / steer_norm) * max_f
 
                 forces[follower.id] = self.formation_weight * 2.0 * steer
 
@@ -213,7 +219,7 @@ class FormationController:
             # Feedforward velocity from leader + slot correction
             feedforward_vel = leader.velocity
             if dist > 0.1:
-                correction_speed = min(follower.max_speed * 0.6, dist * 2.0)
+                correction_speed = min(follower.max_speed, max(1.5, dist * 2.2))
                 slot_dir = to_slot / dist
                 desired_vel = feedforward_vel + slot_dir * correction_speed
             else:
@@ -221,8 +227,9 @@ class FormationController:
 
             steer = desired_vel - follower.velocity
             steer_norm = np.linalg.norm(steer)
-            if steer_norm > settings.max_force:
-                steer = (steer / steer_norm) * settings.max_force
+            max_f = settings.max_force * 1.5 if dist > 8.0 else settings.max_force
+            if steer_norm > max_f:
+                steer = (steer / steer_norm) * max_f
 
             forces[follower.id] = self.formation_weight * steer
 
