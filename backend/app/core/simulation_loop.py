@@ -298,13 +298,14 @@ class SimulationEngine:
                 o_force = obs_forces.get(drone.id, np.zeros(3))
                 c_force = col_forces.get(drone.id, np.zeros(3))
 
-                # Prioritize obstacle avoidance over formation keeping near obstacles
+                # Prioritize obstacle & collision avoidance over formation keeping when proximity danger exists
                 o_mag = np.linalg.norm(o_force)
-                if o_mag > 1.0:
-                    form_attenuation = max(0.05, 1.0 - (o_mag / (settings.max_force * 2.5)))
+                c_mag = np.linalg.norm(c_force)
+                if o_mag > 1.0 or c_mag > 1.0:
+                    form_attenuation = max(0.0, 1.0 - (o_mag + c_mag) / (settings.max_force * 2.0))
                     f_force = f_force * form_attenuation
 
-                total_force = b_force + f_force + n_force + o_force + c_force
+                total_force = b_force + f_force + n_force + o_force + c_force * 2.0
                 drone.apply_force(total_force)
 
         elif self.mission.status == MissionStatus.COMPLETED:
@@ -372,6 +373,29 @@ class SimulationEngine:
                                 if np.dot(tangent, drone.velocity) < 0:
                                     tangent = -tangent
                                 drone.velocity += tangent * 1.5
+
+        # Enforce physical inter-drone hard-core clearance hull (guarantees >= 0.95m > 2 * drone_radius = 0.8m)
+        min_sep = 0.95
+        n_active = len(active_drones)
+        if n_active > 1:
+            pts = np.array([d.position for d in active_drones])
+            diff = pts[:, None, :] - pts[None, :, :]
+            dist = np.linalg.norm(diff, axis=2)
+            np.fill_diagonal(dist, np.inf)
+            ti, tj = np.triu_indices(n_active, k=1)
+            viol = dist[ti, tj] < min_sep
+            for idx in np.where(viol)[0]:
+                i, j = ti[idx], tj[idx]
+                d = max(1e-4, dist[i, j])
+                n_vec = diff[i, j] / d
+                pen = min_sep - d
+                active_drones[i].position += n_vec * (pen * 0.5)
+                active_drones[j].position -= n_vec * (pen * 0.5)
+                rel_v = active_drones[i].velocity - active_drones[j].velocity
+                v_in = np.dot(rel_v, n_vec)
+                if v_in < 0:
+                    active_drones[i].velocity -= n_vec * (v_in * 0.5)
+                    active_drones[j].velocity += n_vec * (v_in * 0.5)
 
         # 11. Update mission progression
         leader = self.swarm.get_leader()

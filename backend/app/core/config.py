@@ -26,8 +26,8 @@ class SimulationConfig(BaseModel):
 
     # Radii & Distances (meters)
     drone_radius: float = 0.4  # physical collision boundary
-    safety_radius: float = 2.0  # collision avoidance repulsion triggers
-    warning_radius: float = 3.5  # near-miss proximity warning triggers
+    safety_radius: float = 1.4  # collision avoidance repulsion triggers
+    warning_radius: float = 2.0  # near-miss proximity warning triggers
     communication_range: float = 40.0  # inter-drone mesh comms
 
     # Boids Parameters
