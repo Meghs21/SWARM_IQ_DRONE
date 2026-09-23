@@ -2,9 +2,10 @@ import React from 'react'
 import { Compass, Target, Clock, BatteryCharging, Crown } from 'lucide-react'
 
 export default function MissionPanel({ mission, leaderId, metrics }) {
-  const progress = mission?.progress || 0
+  const isCompleted = mission?.status === 'COMPLETED' || (mission?.progress || 0) >= 99.9
+  const progress = isCompleted ? 100 : (mission?.progress || 0)
   const elapsed = mission?.elapsed_time || 0
-  const distance = mission?.distance_to_target || 0
+  const distance = isCompleted ? 0 : (mission?.distance_to_target || 0)
   const target = mission?.target || { x: 0, y: 0, z: 0 }
 
   const formatTime = (secs) => {
@@ -28,7 +29,9 @@ export default function MissionPanel({ mission, leaderId, metrics }) {
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between text-xs font-mono">
           <span className="text-gray-400">Progress</span>
-          <span className="text-emerald-400 font-bold">{progress.toFixed(1)}%</span>
+          <span className={isCompleted ? "text-emerald-300 font-extrabold" : "text-emerald-400 font-bold"}>
+            {isCompleted ? "100.0% (GOAL REACHED)" : `${progress.toFixed(1)}%`}
+          </span>
         </div>
         <div className="w-full bg-gray-800/80 rounded-full h-2.5 overflow-hidden p-0.5 border border-gray-700/50">
           <div

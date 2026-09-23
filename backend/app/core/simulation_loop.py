@@ -307,6 +307,45 @@ class SimulationEngine:
                 total_force = b_force + f_force + n_force + o_force + c_force
                 drone.apply_force(total_force)
 
+        elif self.mission.status == MissionStatus.COMPLETED:
+            # Swarm reached goal: active braking deceleration & station-keeping hover in formation
+            leader = self.swarm.get_leader()
+            if leader is not None:
+                # Decelerate leader to zero at the exact target coordinates
+                lead_err = self.mission.target_position - leader.position
+                lead_brake = -leader.velocity * 4.0 + lead_err * 2.5
+                lead_norm = np.linalg.norm(lead_brake)
+                if lead_norm > settings.max_force:
+                    lead_brake = (lead_brake / lead_norm) * settings.max_force
+                leader.apply_force(lead_brake)
+                if np.linalg.norm(lead_err) < 0.25 and np.linalg.norm(leader.velocity) < 0.2:
+                    leader.velocity = np.zeros(3, dtype=np.float64)
+                    leader.position = np.copy(self.mission.target_position)
+
+            # Followers hover in their assigned formation slots around target
+            target_dir = np.array([1.0, 0.0, 1.0])
+            formation_forces = self.formation.compute_formation_forces(
+                all_drones,
+                leader,
+                self.mission.formation,
+                target_dir=target_dir,
+            )
+            col_forces, _, _, _ = self.collision.compute_avoidance_and_metrics(all_drones)
+
+            for drone in active_drones:
+                if leader is not None and drone.id == leader.id:
+                    continue
+                f_force = formation_forces.get(drone.id, np.zeros(3))
+                c_force = col_forces.get(drone.id, np.zeros(3))
+                brake = -drone.velocity * 4.0
+                total_force = f_force + c_force + brake
+                f_norm = np.linalg.norm(total_force)
+                if f_norm > settings.max_force:
+                    total_force = (total_force / f_norm) * settings.max_force
+                drone.apply_force(total_force)
+                if drone.target is not None and np.linalg.norm(drone.position - drone.target) < 0.25 and np.linalg.norm(drone.velocity) < 0.2:
+                    drone.velocity = np.zeros(3, dtype=np.float64)
+
         # 10. Advance drone kinematics and battery
         self.swarm.update(dt)
 

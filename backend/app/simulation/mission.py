@@ -93,6 +93,9 @@ class MissionManager:
 
     def update(self, dt: float, leader_pos: Optional[np.ndarray]) -> None:
         if self.status != MissionStatus.RUNNING:
+            if self.status == MissionStatus.COMPLETED:
+                self.distance_to_target = 0.0
+                self.progress = 100.0
             return
 
         self.elapsed_time += dt
@@ -107,12 +110,15 @@ class MissionManager:
 
             if self.distance_to_target <= settings.goal_reached_threshold:
                 self.progress = 100.0
+                self.distance_to_target = 0.0
                 self.status = MissionStatus.COMPLETED
 
     def to_state(self) -> MissionState:
+        dist = 0.0 if self.status == MissionStatus.COMPLETED else round(self.distance_to_target, 2)
+        prog = 100.0 if self.status == MissionStatus.COMPLETED else round(self.progress, 1)
         return MissionState(
             status=self.status,
-            progress=round(self.progress, 1),
+            progress=prog,
             target=Vector3D(
                 x=round(float(self.target_position[0]), 2),
                 y=round(float(self.target_position[1]), 2),
@@ -123,7 +129,7 @@ class MissionManager:
                 y=round(float(self.start_position[1]), 2),
                 z=round(float(self.start_position[2]), 2),
             ),
-            distance_to_target=round(self.distance_to_target, 2),
+            distance_to_target=dist,
             elapsed_time=round(self.elapsed_time, 1),
             formation=self.formation,
         )
