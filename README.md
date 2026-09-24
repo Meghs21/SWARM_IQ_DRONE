@@ -101,9 +101,9 @@ SwarmIQ combines six mathematical algorithms into a layered hierarchical control
 | Scenario | Fleet Size | Environment | Key Algorithmic Demonstration |
 | :--- | :---: | :--- | :--- |
 | **1. Open Field** | 20 (up to 100) | Open space, zero obstacles | Pure Boids flocking, clean formation keeping, direct waypoint acquisition. |
-| **2. Obstacle Course** | 50 (up to 100) | High-rise static towers & pillars | Leader A\* global 3D path planning, smooth formation obstacle avoidance. |
-| **3. Dynamic Hazards** | 50 (up to 100) | Moving oscillating hazard spheres | Real-time APF reactive evasion and kinetic deflection. |
-| **4. Narrow Gap / Funnel** | 50 (up to 100) | Funnel corridor & barrier gap | Swarm compression, automatic formation elongation, and squeeze clearance. |
+| **2. Obstacle Course** | 20 (up to 100) | High-rise static towers & pillars | Leader A\* global 3D path planning, smooth formation obstacle avoidance. |
+| **3. Dynamic Hazards** | 20 (up to 100) | Moving oscillating hazard spheres | Real-time APF reactive evasion and kinetic deflection. |
+| **4. Narrow Gap / Funnel** | 20 (up to 100) | Funnel corridor & barrier gap | Swarm compression, automatic formation elongation, and squeeze clearance. |
 | **5. Urban Canyon** | 100 (up to 100) | Dense skyscraper canyon grid | Maximum density swarm stress-test: A\* navigation, APF curl bypass, and zero-collision hard hull. |
 
 ---
